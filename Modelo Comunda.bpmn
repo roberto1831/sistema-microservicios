@@ -1,0 +1,513 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" id="Definitions_DeployMicroservices_Updated" targetNamespace="http://camunda.org/examples/deploy" exporter="Camunda Modeler" exporterVersion="5.37.0">
+  <bpmn:process id="Deploy_Microservices_Cluster" name="Despliegue - Microservicios (actualizado)" isExecutable="true">
+    <bpmn:startEvent id="StartEvent" name="Iniciar despliegue">
+      <bpmn:outgoing>Flow_Start_Cockroach</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:serviceTask id="Task_CockroachDB_Nodes" name="Levantar nodos CockroachDB" camunda:type="external" camunda:topic="docker-cockroach">
+      <bpmn:incoming>Flow_Start_Cockroach</bpmn:incoming>
+      <bpmn:outgoing>Flow_Cockroach_To_GW</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="GW_Cockroach" name="¿Éxito CockroachDB?">
+      <bpmn:incoming>Flow_Cockroach_To_GW</bpmn:incoming>
+      <bpmn:outgoing>Flow_Cockroach_Success</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Cockroach_Error_Timer</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:intermediateCatchEvent id="Timer_Cockroach_Retry" name="Esperar antes de reintentar (Cockroach)">
+      <bpmn:incoming>Flow_Cockroach_Error_Timer</bpmn:incoming>
+      <bpmn:outgoing>Flow_Cockroach_Timer_To_Retry</bpmn:outgoing>
+      <bpmn:timerEventDefinition>
+        <bpmn:timeDuration>PT30S</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:intermediateCatchEvent>
+    <bpmn:serviceTask id="Task_Retry_Cockroach" name="Reintentar CockroachDB" camunda:type="external" camunda:topic="docker-cockroach-retry">
+      <bpmn:incoming>Flow_Cockroach_Timer_To_Retry</bpmn:incoming>
+      <bpmn:outgoing>Flow_RetryCockroach_To_Cockroach</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="Task_InitCluster" name="Inicializar clúster CockroachDB" camunda:type="external" camunda:topic="docker-cockroach-init">
+      <bpmn:incoming>Flow_Cockroach_Success</bpmn:incoming>
+      <bpmn:outgoing>Flow_Init_To_GW</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="GW_Init" name="¿Éxito inicialización?">
+      <bpmn:incoming>Flow_Init_To_GW</bpmn:incoming>
+      <bpmn:outgoing>Flow_Init_Success</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Init_Error_Timer</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:intermediateCatchEvent id="Timer_Init_Retry" name="Esperar antes de reintentar (Init)">
+      <bpmn:incoming>Flow_Init_Error_Timer</bpmn:incoming>
+      <bpmn:outgoing>Flow_Init_Timer_To_Retry</bpmn:outgoing>
+      <bpmn:timerEventDefinition>
+        <bpmn:timeDuration>PT20S</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:intermediateCatchEvent>
+    <bpmn:serviceTask id="Task_Retry_Init" name="Reintentar inicialización" camunda:type="external" camunda:topic="docker-cockroach-retry">
+      <bpmn:incoming>Flow_Init_Timer_To_Retry</bpmn:incoming>
+      <bpmn:outgoing>Flow_RetryInit_To_Init</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="Task_RabbitMQ" name="Levantar RabbitMQ" camunda:type="external" camunda:topic="docker-rabbitmq">
+      <bpmn:incoming>Flow_Init_Success</bpmn:incoming>
+      <bpmn:outgoing>Flow_Rabbit_To_GW</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="GW_Rabbit" name="¿Éxito RabbitMQ?">
+      <bpmn:incoming>Flow_Rabbit_To_GW</bpmn:incoming>
+      <bpmn:outgoing>Flow_Rabbit_Success</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Rabbit_Error_Timer</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:intermediateCatchEvent id="Timer_Rabbit_Retry" name="Esperar antes de reintentar (RabbitMQ)">
+      <bpmn:incoming>Flow_Rabbit_Error_Timer</bpmn:incoming>
+      <bpmn:outgoing>Flow_Rabbit_Timer_To_Retry</bpmn:outgoing>
+      <bpmn:timerEventDefinition>
+        <bpmn:timeDuration>PT15S</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:intermediateCatchEvent>
+    <bpmn:serviceTask id="Task_Retry_Rabbit" name="Reintentar RabbitMQ" camunda:type="external" camunda:topic="docker-rabbitmq-retry">
+      <bpmn:incoming>Flow_Rabbit_Timer_To_Retry</bpmn:incoming>
+      <bpmn:outgoing>Flow_RetryRabbit_To_Rabbit</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="Task_Eureka" name="Construir y desplegar ms-eureka-server" camunda:type="external" camunda:topic="maven-docker-eureka">
+      <bpmn:incoming>Flow_Rabbit_Success</bpmn:incoming>
+      <bpmn:outgoing>Flow_Eureka_To_GW</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="GW_Eureka" name="¿Éxito Eureka?">
+      <bpmn:incoming>Flow_Eureka_To_GW</bpmn:incoming>
+      <bpmn:outgoing>Flow_Eureka_Success</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Eureka_Error_Timer</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:intermediateCatchEvent id="Timer_Eureka_Retry" name="Esperar antes de reintentar (Eureka)">
+      <bpmn:incoming>Flow_Eureka_Error_Timer</bpmn:incoming>
+      <bpmn:outgoing>Flow_Eureka_Timer_To_Retry</bpmn:outgoing>
+      <bpmn:timerEventDefinition>
+        <bpmn:timeDuration>PT30S</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:intermediateCatchEvent>
+    <bpmn:serviceTask id="Task_Retry_Eureka" name="Reintentar Eureka" camunda:type="external" camunda:topic="maven-docker-eureka-retry">
+      <bpmn:incoming>Flow_Eureka_Timer_To_Retry</bpmn:incoming>
+      <bpmn:outgoing>Flow_RetryEureka_To_Eureka</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="Task_AuthService" name="Construir y desplegar ms-auth (Auth Service)" camunda:type="external" camunda:topic="maven-docker-auth">
+      <bpmn:incoming>Flow_Eureka_Success</bpmn:incoming>
+      <bpmn:outgoing>Flow_Auth_To_GW</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="GW_Auth" name="¿Éxito Auth Service?">
+      <bpmn:incoming>Flow_Auth_To_GW</bpmn:incoming>
+      <bpmn:outgoing>Flow_Auth_Success</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Auth_Error_Timer</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:intermediateCatchEvent id="Timer_Auth_Retry" name="Esperar antes de reintentar (Auth)">
+      <bpmn:incoming>Flow_Auth_Error_Timer</bpmn:incoming>
+      <bpmn:outgoing>Flow_Auth_Timer_To_Retry</bpmn:outgoing>
+      <bpmn:timerEventDefinition>
+        <bpmn:timeDuration>PT10S</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:intermediateCatchEvent>
+    <bpmn:serviceTask id="Task_Retry_Auth" name="Reintentar Auth Service" camunda:type="external" camunda:topic="maven-docker-auth-retry">
+      <bpmn:incoming>Flow_Auth_Timer_To_Retry</bpmn:incoming>
+      <bpmn:outgoing>Flow_RetryAuth_To_Auth</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="Task_ApiPublicaciones" name="Construir y desplegar api-publicaciones" camunda:type="external" camunda:topic="maven-docker-api-publicaciones">
+      <bpmn:incoming>Flow_Auth_Success</bpmn:incoming>
+      <bpmn:outgoing>Flow_ApiPub_To_GW</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="GW_ApiPub" name="¿Éxito api-publicaciones?">
+      <bpmn:incoming>Flow_ApiPub_To_GW</bpmn:incoming>
+      <bpmn:outgoing>Flow_ApiPub_Success</bpmn:outgoing>
+      <bpmn:outgoing>Flow_ApiPub_Error_Timer</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:intermediateCatchEvent id="Timer_ApiPub_Retry" name="Esperar antes de reintentar (API Publicaciones)">
+      <bpmn:incoming>Flow_ApiPub_Error_Timer</bpmn:incoming>
+      <bpmn:outgoing>Flow_ApiPub_Timer_To_Retry</bpmn:outgoing>
+      <bpmn:timerEventDefinition>
+        <bpmn:timeDuration>PT10S</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:intermediateCatchEvent>
+    <bpmn:serviceTask id="Task_Retry_ApiPub" name="Reintentar api-publicaciones" camunda:type="external" camunda:topic="maven-docker-api-publicaciones-retry">
+      <bpmn:incoming>Flow_ApiPub_Timer_To_Retry</bpmn:incoming>
+      <bpmn:outgoing>Flow_RetryApiPub_To_ApiPub</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:userTask id="Task_Confirm_Registro" name="Confirmar registro de servicios en Eureka" camunda:formKey="embedded:app:forms/confirm-registro.html">
+      <bpmn:extensionElements>
+        <camunda:formData>
+          <camunda:formField id="confirm" label="¿Todos los servicios registrados correctamente?" type="boolean" defaultValue="true" />
+          <camunda:formField id="notes" label="Notas (opcional)" type="string" />
+        </camunda:formData>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_ApiPub_Success</bpmn:incoming>
+      <bpmn:outgoing>Flow_Confirm_To_End_Success</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:endEvent id="EndEvent_Success" name="Despliegue completado">
+      <bpmn:incoming>Flow_Confirm_To_End_Success</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:endEvent id="EndEvent_Failure" name="Despliegue fallido (límite reintentos)">
+      <bpmn:incoming>Flow_Global_Retry_Fail</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_Start_Cockroach" sourceRef="StartEvent" targetRef="Task_CockroachDB_Nodes" />
+    <bpmn:sequenceFlow id="Flow_Cockroach_To_GW" sourceRef="Task_CockroachDB_Nodes" targetRef="GW_Cockroach" />
+    <bpmn:sequenceFlow id="Flow_Cockroach_Success" sourceRef="GW_Cockroach" targetRef="Task_InitCluster">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${cockroachSuccess == true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_Cockroach_Error_Timer" sourceRef="GW_Cockroach" targetRef="Timer_Cockroach_Retry">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${cockroachSuccess == false}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_Cockroach_Timer_To_Retry" sourceRef="Timer_Cockroach_Retry" targetRef="Task_Retry_Cockroach" />
+    <bpmn:sequenceFlow id="Flow_RetryCockroach_To_Cockroach" sourceRef="Task_Retry_Cockroach" targetRef="Task_CockroachDB_Nodes" />
+    <bpmn:sequenceFlow id="Flow_Init_To_GW" sourceRef="Task_InitCluster" targetRef="GW_Init" />
+    <bpmn:sequenceFlow id="Flow_Init_Success" sourceRef="GW_Init" targetRef="Task_RabbitMQ">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${initSuccess == true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_Init_Error_Timer" sourceRef="GW_Init" targetRef="Timer_Init_Retry">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${initSuccess == false}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_Init_Timer_To_Retry" sourceRef="Timer_Init_Retry" targetRef="Task_Retry_Init" />
+    <bpmn:sequenceFlow id="Flow_RetryInit_To_Init" sourceRef="Task_Retry_Init" targetRef="Task_InitCluster" />
+    <bpmn:sequenceFlow id="Flow_Rabbit_To_GW" sourceRef="Task_RabbitMQ" targetRef="GW_Rabbit" />
+    <bpmn:sequenceFlow id="Flow_Rabbit_Success" sourceRef="GW_Rabbit" targetRef="Task_Eureka">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${rabbitSuccess == true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_Rabbit_Error_Timer" sourceRef="GW_Rabbit" targetRef="Timer_Rabbit_Retry">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${rabbitSuccess == false}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_Rabbit_Timer_To_Retry" sourceRef="Timer_Rabbit_Retry" targetRef="Task_Retry_Rabbit" />
+    <bpmn:sequenceFlow id="Flow_RetryRabbit_To_Rabbit" sourceRef="Task_Retry_Rabbit" targetRef="Task_RabbitMQ" />
+    <bpmn:sequenceFlow id="Flow_Eureka_To_GW" sourceRef="Task_Eureka" targetRef="GW_Eureka" />
+    <bpmn:sequenceFlow id="Flow_Eureka_Success" sourceRef="GW_Eureka" targetRef="Task_AuthService">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${eurekaSuccess == true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_Eureka_Error_Timer" sourceRef="GW_Eureka" targetRef="Timer_Eureka_Retry">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${eurekaSuccess == false}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_Eureka_Timer_To_Retry" sourceRef="Timer_Eureka_Retry" targetRef="Task_Retry_Eureka" />
+    <bpmn:sequenceFlow id="Flow_RetryEureka_To_Eureka" sourceRef="Task_Retry_Eureka" targetRef="Task_Eureka" />
+    <bpmn:sequenceFlow id="Flow_Auth_To_GW" sourceRef="Task_AuthService" targetRef="GW_Auth" />
+    <bpmn:sequenceFlow id="Flow_Auth_Success" sourceRef="GW_Auth" targetRef="Task_ApiPublicaciones">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${authSuccess == true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_Auth_Error_Timer" sourceRef="GW_Auth" targetRef="Timer_Auth_Retry">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${authSuccess == false}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_RetryAuth_To_Auth" sourceRef="Task_Retry_Auth" targetRef="Task_AuthService" />
+    <bpmn:sequenceFlow id="Flow_ApiPub_To_GW" sourceRef="Task_ApiPublicaciones" targetRef="GW_ApiPub" />
+    <bpmn:sequenceFlow id="Flow_ApiPub_Success" sourceRef="GW_ApiPub" targetRef="Task_Confirm_Registro">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${apiPubSuccess == true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_ApiPub_Error_Timer" sourceRef="GW_ApiPub" targetRef="Timer_ApiPub_Retry">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${apiPubSuccess == false}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_ApiPub_Timer_To_Retry" sourceRef="Timer_ApiPub_Retry" targetRef="Task_Retry_ApiPub" />
+    <bpmn:sequenceFlow id="Flow_RetryApiPub_To_ApiPub" sourceRef="Task_Retry_ApiPub" targetRef="Task_ApiPublicaciones" />
+    <bpmn:sequenceFlow id="Flow_Confirm_To_End_Success" sourceRef="Task_Confirm_Registro" targetRef="EndEvent_Success" />
+    <bpmn:sequenceFlow id="Flow_Global_Retry_Fail" sourceRef="Task_Retry_Eureka" targetRef="EndEvent_Failure" />
+    <bpmn:sequenceFlow id="Flow_Auth_Timer_To_Retry" sourceRef="Timer_Auth_Retry" targetRef="Task_Retry_Auth" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_Deploy">
+    <bpmndi:BPMNPlane id="BPMNPlane_Deploy" bpmnElement="Deploy_Microservices_Cluster">
+      <bpmndi:BPMNShape id="Shape_Start" bpmnElement="StartEvent">
+        <dc:Bounds x="180" y="210" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="155" y="246" width="86" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Cockroach" bpmnElement="Task_CockroachDB_Nodes">
+        <dc:Bounds x="260" y="190" width="140" height="60" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_GW_Cockroach" bpmnElement="GW_Cockroach" isMarkerVisible="true">
+        <dc:Bounds x="430" y="205" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="411" y="241" width="74" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Timer_Cockroach" bpmnElement="Timer_Cockroach_Retry">
+        <dc:Bounds x="530" y="190" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="506" y="226" width="84" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Init" bpmnElement="Task_InitCluster">
+        <dc:Bounds x="400" y="340" width="160" height="60" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Retry_Cockroach" bpmnElement="Task_Retry_Cockroach">
+        <dc:Bounds x="478" y="80" width="140" height="60" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Eureka" bpmnElement="Task_Eureka">
+        <dc:Bounds x="390" y="730" width="180" height="60" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_GW_Rabbit" bpmnElement="GW_Rabbit" isMarkerVisible="true">
+        <dc:Bounds x="742" y="582" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="642" y="593" width="90" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Timer_Rabbit" bpmnElement="Timer_Rabbit_Retry">
+        <dc:Bounds x="832" y="633" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="708" y="646" width="84" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Retry_Rabbit" bpmnElement="Task_Retry_Rabbit">
+        <dc:Bounds x="920" y="520" width="140" height="60" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Timer_Init" bpmnElement="Timer_Init_Retry">
+        <dc:Bounds x="762" y="512" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="766" y="626" width="84" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Rabbit" bpmnElement="Task_RabbitMQ">
+        <dc:Bounds x="770" y="400" width="160" height="60" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_GW_Init" bpmnElement="GW_Init" isMarkerVisible="true">
+        <dc:Bounds x="642" y="462" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="564" y="466" width="68" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Retry_Init" bpmnElement="Task_Retry_Init">
+        <dc:Bounds x="397" y="458" width="140" height="60" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Retry_Eureka" bpmnElement="Task_Retry_Eureka">
+        <dc:Bounds x="400" y="890" width="160" height="60" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_GW_Eureka" bpmnElement="GW_Eureka" isMarkerVisible="true">
+        <dc:Bounds x="1112" y="672" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1092" y="648" width="76" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Timer_Eureka" bpmnElement="Timer_Eureka_Retry">
+        <dc:Bounds x="1162" y="832" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1138" y="878" width="84" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_End_Failure" bpmnElement="EndEvent_Failure">
+        <dc:Bounds x="822" y="1062" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="797" y="1098" width="87" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Auth" bpmnElement="Task_AuthService">
+        <dc:Bounds x="1130" y="400" width="180" height="60" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_GW_Auth" bpmnElement="GW_Auth" isMarkerVisible="true">
+        <dc:Bounds x="1322" y="652" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1311.5" y="614.5" width="57" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Timer_Auth" bpmnElement="Timer_Auth_Retry">
+        <dc:Bounds x="1442" y="442" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1348" y="446" width="84" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Confirm" bpmnElement="Task_Confirm_Registro">
+        <dc:Bounds x="1770" y="710" width="200" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Timer_ApiPub" bpmnElement="Timer_ApiPub_Retry">
+        <dc:Bounds x="1602" y="742" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1578" y="692" width="84" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Retry_Auth" bpmnElement="Task_Retry_Auth">
+        <dc:Bounds x="1240" y="520" width="140" height="60" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_GW_ApiPub" bpmnElement="GW_ApiPub" isMarkerVisible="true">
+        <dc:Bounds x="1482" y="722" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1463.5" y="767.5" width="73" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_ApiPub" bpmnElement="Task_ApiPublicaciones">
+        <dc:Bounds x="1260" y="810" width="200" height="60" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_End_Success" bpmnElement="EndEvent_Success">
+        <dc:Bounds x="1812" y="1012" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1801" y="974.5" width="57" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Shape_Retry_ApiPub" bpmnElement="Task_Retry_ApiPub">
+        <dc:Bounds x="1610" y="900" width="140" height="60" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Edge_Flow_Start_Cockroach" bpmnElement="Flow_Start_Cockroach">
+        <di:waypoint x="216" y="228" />
+        <di:waypoint x="260" y="228" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_Cockroach_To_GW" bpmnElement="Flow_Cockroach_To_GW">
+        <di:waypoint x="400" y="220" />
+        <di:waypoint x="430" y="220" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_Cockroach_Success" bpmnElement="Flow_Cockroach_Success">
+        <di:waypoint x="467" y="241" />
+        <di:waypoint x="467" y="291" />
+        <di:waypoint x="400" y="291" />
+        <di:waypoint x="400" y="350" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_Cockroach_Error_Timer" bpmnElement="Flow_Cockroach_Error_Timer">
+        <di:waypoint x="466" y="220" />
+        <di:waypoint x="530" y="220" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_Cockroach_Timer_To_Retry" bpmnElement="Flow_Cockroach_Timer_To_Retry">
+        <di:waypoint x="548" y="190" />
+        <di:waypoint x="548" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_RetryCockroach_To_Cockroach" bpmnElement="Flow_RetryCockroach_To_Cockroach">
+        <di:waypoint x="478" y="110" />
+        <di:waypoint x="439" y="110" />
+        <di:waypoint x="439" y="220" />
+        <di:waypoint x="400" y="220" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_Init_To_GW" bpmnElement="Flow_Init_To_GW">
+        <di:waypoint x="560" y="370" />
+        <di:waypoint x="660" y="370" />
+        <di:waypoint x="660" y="462" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_Init_Success" bpmnElement="Flow_Init_Success">
+        <di:waypoint x="660" y="462" />
+        <di:waypoint x="660" y="378" />
+        <di:waypoint x="850" y="378" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_Init_Error_Timer" bpmnElement="Flow_Init_Error_Timer">
+        <di:waypoint x="675" y="477" />
+        <di:waypoint x="708" y="477" />
+        <di:waypoint x="708" y="520" />
+        <di:waypoint x="765" y="520" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_Init_Timer_To_Retry" bpmnElement="Flow_Init_Timer_To_Retry">
+        <di:waypoint x="767" y="542" />
+        <di:waypoint x="620" y="542" />
+        <di:waypoint x="620" y="488" />
+        <di:waypoint x="537" y="488" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_RetryInit_To_Init" bpmnElement="Flow_RetryInit_To_Init">
+        <di:waypoint x="467" y="458" />
+        <di:waypoint x="467" y="429" />
+        <di:waypoint x="480" y="429" />
+        <di:waypoint x="480" y="400" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_Rabbit_To_GW" bpmnElement="Flow_Rabbit_To_GW">
+        <di:waypoint x="770" y="430" />
+        <di:waypoint x="760" y="430" />
+        <di:waypoint x="760" y="582" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_Rabbit_Success" bpmnElement="Flow_Rabbit_Success">
+        <di:waypoint x="760" y="618" />
+        <di:waypoint x="760" y="760" />
+        <di:waypoint x="570" y="760" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_Rabbit_Error_Timer" bpmnElement="Flow_Rabbit_Error_Timer">
+        <di:waypoint x="760" y="618" />
+        <di:waypoint x="760" y="663" />
+        <di:waypoint x="837" y="663" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_Rabbit_Timer_To_Retry" bpmnElement="Flow_Rabbit_Timer_To_Retry">
+        <di:waypoint x="863" y="663" />
+        <di:waypoint x="894" y="663" />
+        <di:waypoint x="894" y="550" />
+        <di:waypoint x="920" y="550" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_RetryRabbit_To_Rabbit" bpmnElement="Flow_RetryRabbit_To_Rabbit">
+        <di:waypoint x="990" y="520" />
+        <di:waypoint x="990" y="430" />
+        <di:waypoint x="930" y="430" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_Eureka_To_GW" bpmnElement="Flow_Eureka_To_GW">
+        <di:waypoint x="570" y="760" />
+        <di:waypoint x="1130" y="760" />
+        <di:waypoint x="1130" y="708" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_Eureka_Success" bpmnElement="Flow_Eureka_Success">
+        <di:waypoint x="1147" y="689" />
+        <di:waypoint x="1147" y="566" />
+        <di:waypoint x="1130" y="566" />
+        <di:waypoint x="1130" y="450" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_Eureka_Error_Timer" bpmnElement="Flow_Eureka_Error_Timer">
+        <di:waypoint x="1130" y="708" />
+        <di:waypoint x="1130" y="770" />
+        <di:waypoint x="1180" y="770" />
+        <di:waypoint x="1180" y="832" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_Eureka_Timer_To_Retry" bpmnElement="Flow_Eureka_Timer_To_Retry">
+        <di:waypoint x="1162" y="850" />
+        <di:waypoint x="480" y="850" />
+        <di:waypoint x="480" y="890" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_RetryEureka_To_Eureka" bpmnElement="Flow_RetryEureka_To_Eureka">
+        <di:waypoint x="560" y="920" />
+        <di:waypoint x="1045" y="920" />
+        <di:waypoint x="1045" y="790" />
+        <di:waypoint x="570" y="765" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_Auth_To_GW" bpmnElement="Flow_Auth_To_GW">
+        <di:waypoint x="1220" y="460" />
+        <di:waypoint x="1220" y="480" />
+        <di:waypoint x="1200" y="480" />
+        <di:waypoint x="1200" y="667" />
+        <di:waypoint x="1325" y="667" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_Auth_Success" bpmnElement="Flow_Auth_Success">
+        <di:waypoint x="1340" y="688" />
+        <di:waypoint x="1340" y="730" />
+        <di:waypoint x="1360" y="730" />
+        <di:waypoint x="1360" y="781" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_Auth_Error_Timer" bpmnElement="Flow_Auth_Error_Timer">
+        <di:waypoint x="1355" y="667" />
+        <di:waypoint x="1430" y="667" />
+        <di:waypoint x="1430" y="540" />
+        <di:waypoint x="1460" y="540" />
+        <di:waypoint x="1460" y="478" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_Auth_Timer_To_Retry" bpmnElement="Flow_Auth_Timer_To_Retry">
+        <di:waypoint x="1460" y="478" />
+        <di:waypoint x="1460" y="550" />
+        <di:waypoint x="1380" y="550" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_RetryAuth_To_Auth" bpmnElement="Flow_RetryAuth_To_Auth">
+        <di:waypoint x="1310" y="520" />
+        <di:waypoint x="1310" y="490" />
+        <di:waypoint x="1220" y="490" />
+        <di:waypoint x="1220" y="460" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_ApiPub_To_GW" bpmnElement="Flow_ApiPub_To_GW">
+        <di:waypoint x="1360" y="810" />
+        <di:waypoint x="1360" y="737" />
+        <di:waypoint x="1485" y="737" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_ApiPub_Success" bpmnElement="Flow_ApiPub_Success">
+        <di:waypoint x="1500" y="722" />
+        <di:waypoint x="1500" y="697" />
+        <di:waypoint x="1770" y="697" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_ApiPub_Error_Timer" bpmnElement="Flow_ApiPub_Error_Timer">
+        <di:waypoint x="1515" y="737" />
+        <di:waypoint x="1560" y="737" />
+        <di:waypoint x="1560" y="772" />
+        <di:waypoint x="1607" y="772" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_ApiPub_Timer_To_Retry" bpmnElement="Flow_ApiPub_Timer_To_Retry">
+        <di:waypoint x="1620" y="778" />
+        <di:waypoint x="1620" y="839" />
+        <di:waypoint x="1680" y="839" />
+        <di:waypoint x="1680" y="900" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_RetryApiPub_To_ApiPub" bpmnElement="Flow_RetryApiPub_To_ApiPub">
+        <di:waypoint x="1610" y="930" />
+        <di:waypoint x="1535" y="930" />
+        <di:waypoint x="1535" y="840" />
+        <di:waypoint x="1460" y="840" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_Confirm_To_End_Success" bpmnElement="Flow_Confirm_To_End_Success">
+        <di:waypoint x="1870" y="790" />
+        <di:waypoint x="1870" y="1032" />
+        <di:waypoint x="1848" y="1032" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Edge_Flow_Global_Retry_Fail" bpmnElement="Flow_Global_Retry_Fail">
+        <di:waypoint x="484" y="950" />
+        <di:waypoint x="500" y="1080" />
+        <di:waypoint x="822" y="1080" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
