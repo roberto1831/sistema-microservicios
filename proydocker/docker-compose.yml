@@ -1,0 +1,104 @@
+version: '3.8'
+
+services:
+  # Nodo 1 del clúster de CockroachDB
+  cockroachdb-node1:
+    image: cockroachdb/cockroach:v23.1.9
+    container_name: cockroachdb-node1
+    command: start --insecure --join=cockroachdb-node1,cockroachdb-node2,cockroachdb-node3 --listen-addr=0.0.0.0
+    ports:
+      - "26257:26257" # Puerto SQL para clientes
+      - "8080:8080"   # Puerto para la UI de administración
+    volumes:
+      - cockroachdb-data1:/cockroach/cockroach-data
+
+  # Nodo 2 del clúster
+  cockroachdb-node2:
+    image: cockroachdb/cockroach:v23.1.9
+    container_name: cockroachdb-node2
+    command: start --insecure --join=cockroachdb-node1,cockroachdb-node2,cockroachdb-node3
+    depends_on:
+      - cockroachdb-node1
+    volumes:
+      - cockroachdb-data2:/cockroach/cockroach-data
+
+  # Nodo 3 del clúster
+  cockroachdb-node3:
+    image: cockroachdb/cockroach:v23.1.9
+    container_name: cockroachdb-node3
+    command: start --insecure --join=cockroachdb-node1,cockroachdb-node2,cockroachdb-node3
+    depends_on:
+      - cockroachdb-node1
+    volumes:
+      - cockroachdb-data3:/cockroach/cockroach-data
+
+  # Servicio para inicializar el clúster
+  cockroachdb-init:
+    image: cockroachdb/cockroach:v23.1.9
+    container_name: cockroachdb-init
+    command: init --insecure --host=cockroachdb-node1
+    depends_on:
+      - cockroachdb-node1
+      - cockroachdb-node2
+      - cockroachdb-node3
+  # Broker de Mensajes para comunicación asíncrona
+  rabbitmq:
+     image: rabbitmq:3.12-management
+     container_name: rabbitmq
+     ports:
+       - "5672:5672"   # Puerto para la comunicación de los microservicios (protocolo AMQP)
+       - "15672:15672" # Puerto para la interfaz de administración web
+     environment:
+       - RABBITMQ_DEFAULT_USER=admin
+       - RABBITMQ_DEFAULT_PASS=admin
+     volumes:
+       - rabbitmq-data:/var/lib/rabbitmq
+       
+  eureka-server:
+    build:
+      context: ./ms-eureka-server
+      dockerfile: Dockerfile
+    container_name: ms-eureka-server
+    ports:
+      - "8761:8761"
+    environment:
+      - JAVA_OPTS=-Dmanagement.metrics.enabled=false -Dmanagement.metrics.binders.tomcat.enabled=false -Dmanagement.metrics.binders.system.enabled=false -Dmanagement.metrics.binders.processor.enabled=false
+      - EUREKA_INSTANCE_HOSTNAME=${HOST_IP}
+      - EUREKA_INSTANCE_PREFER_IP_ADDRESS=true
+      - EUREKA_INSTANCE_IP_ADDRESS=${HOST_IP}
+      - SPRING_PROFILES_ACTIVE=default
+    restart: unless-stopped
+    
+  auth-service:
+    build:
+      context: ./ms-auth
+      dockerfile: Dockerfile
+    container_name: ms-auth
+    ports:
+      - "9000:9000"
+    depends_on:
+      - cockroachdb-node1
+      - rabbitmq
+      - eureka-server
+    environment:     
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://eureka-server:8761/eureka
+      
+  api-publicaciones:
+    build:
+      context: ./api-publicaciones
+      dockerfile: Dockerfile
+    container_name: api-publicaciones
+    ports:
+      - "9001:9001"
+    depends_on:
+      - cockroachdb-node1
+      - rabbitmq
+      - eureka-server
+    environment:
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://eureka-server:8761/eureka
+
+volumes:
+  cockroachdb-data1:
+  cockroachdb-data2:
+  cockroachdb-data3:
+  rabbitmq-data:

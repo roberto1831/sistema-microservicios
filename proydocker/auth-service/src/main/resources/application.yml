@@ -1,0 +1,29 @@
+server:
+  port: 9000 # Puerto para el Auth Service
+
+spring:
+  application:
+    name: auth-service # Nombre con el que se registrará en Eureka
+
+  # Configuración de la base de datos CockroachDB
+  datasource:
+    url: jdbc:postgresql://cockroachdb-node1:26257/auth?sslmode=disable
+    username: root
+    password: "" # Sin contraseña en modo insecure
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update # Spring creará/actualizará las tablas automáticamente
+
+  # Configuración de RabbitMQ
+  rabbitmq:
+    host: rabbitmq
+    port: 5672
+    username: admin
+    password: admin
+
+# Configuración del cliente Eureka
+eureka:
+  client:
+    service-url:
+      defaultZone: http://eureka-server:8761/eureka
