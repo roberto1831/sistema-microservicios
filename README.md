@@ -51,8 +51,8 @@ Para levantar todo el entorno en tu máquina local, solo necesitas tener instala
 
 1.  **Clona este repositorio:**
     ```bash
-    git clone <URL_DEL_REPOSITORIO>
-    cd <NOMBRE_DEL_REPOSITORIO>
+    git clone <https://github.com/roberto1831/sistema-microservicios>
+    cd sistema-microservicios
     ```
 
 2.  **Construye y levanta todos los servicios:**
